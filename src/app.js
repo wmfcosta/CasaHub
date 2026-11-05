@@ -1,10 +1,12 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+import { createClient } from '@neon/neon-js/supabase';
 import { SECOES, COMUNS } from './catalogo.js';
+import './styles.css';
 
-const cfg = window.CASAHUB_CONFIG || {};
-const sb = createClient(cfg.supabaseUrl, cfg.supabaseKey, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
+// Endereço do banco no Neon (sem usuário/senha). O login e o acesso aos dados
+// são controlados pelo Neon Auth e pelas regras de linha (RLS) do banco.
+const NEON_URL = import.meta.env.VITE_NEON_URL;
+const sb = NEON_URL ? createClient(NEON_URL) : null;
+const POLL_MS = 4000;
 
 const DIAS_HIST = 35, DIA = 864e5;
 const SECMAP = Object.fromEntries(SECOES.map(s => [s.id, s]));
@@ -18,7 +20,7 @@ const secOf = s => SECMAP[s] ? s : 'outros';
 
 let session = null, me = null, fam = null, membros = [];
 let listas = [], itens = [], catalogo = [], curId = null;
-let loaded = false, flashId = null, secFilter = 'todos', channel = null;
+let loaded = false, flashId = null, secFilter = 'todos', pollT = null, versao = null;
 
 /* ---------- utilidades ---------- */
 let toastT;
@@ -29,7 +31,7 @@ const nomeDe = id => !id ? 'alguém' : id === me ? 'você' : (membros.find(m => 
 function msgErro(e) {
   const m = (e && (e.message || e.error_description)) || '';
   if (/rate limit|security purposes/i.test(m)) return 'Muitas tentativas. Aguarde um minuto e tente de novo.';
-  if (/expired|invalid/i.test(m) && /token|otp/i.test(m)) return 'Código inválido ou vencido. Peça um novo código.';
+  if (/expired|invalid|incorrect/i.test(m) && /token|otp|code|código/i.test(m)) return 'Código inválido ou vencido. Peça um novo código.';
   if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão. Verifique a internet e tente de novo.';
   return m || 'Algo deu errado. Tente de novo.';
 }
@@ -40,7 +42,7 @@ $('#fEmail').addEventListener('submit', async e => {
   e.preventDefault();
   emailAtual = $('#lEmail').value.trim().toLowerCase();
   const b = $('#lSend'); b.disabled = true; showErr($('#lErr'), '');
-  const { error } = await sb.auth.signInWithOtp({ email: emailAtual, options: { shouldCreateUser: true, emailRedirectTo: location.origin } });
+  const { error } = await sb.auth.signInWithOtp({ email: emailAtual });
   b.disabled = false;
   if (error) return showErr($('#lErr'), msgErro(error));
   $('#codeMsg').textContent = `Enviamos um código para ${emailAtual}. Confira também a caixa de spam.`;
@@ -102,7 +104,7 @@ async function abrirFamilia(id) {
   screen('app'); route();
   await Promise.all([carregarMembros(), carregarListas(), carregarCatalogo()]);
   loaded = true; renderAll();
-  assinar();
+  versao = null; acompanhar();
 }
 
 /* ---------- dados ---------- */
@@ -129,22 +131,28 @@ async function carregarCatalogo() {
   catalogo = data || [];
 }
 
-let refreshT = {};
-function adiar(chave, fn) { clearTimeout(refreshT[chave]); refreshT[chave] = setTimeout(async () => { await fn(); renderAll(); }, 200); }
-function assinar() {
-  if (channel) sb.removeChannel(channel);
-  const f = `familia_id=eq.${fam.id}`;
-  channel = sb.channel('fam-' + fam.id)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'itens', filter: f }, () => adiar('itens', carregarItens))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'listas', filter: f }, () => adiar('listas', carregarListas))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'catalogo', filter: f }, () => adiar('cat', carregarCatalogo))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'membros', filter: f }, () => adiar('mem', carregarMembros))
-    .subscribe();
+// Atualização "ao vivo": a cada poucos segundos, com o app aberto, pergunta ao banco
+// se algo mudou na família (consulta leve) e só então recarrega os dados.
+let ocupado = 0;
+async function verificar() {
+  if (!fam || ocupado || document.visibilityState !== 'visible') return;
+  const { data, error } = await sb.rpc('versao_familia', { p_familia: fam.id });
+  if (error || data == null || data === versao) return;
+  const primeira = versao === null; versao = data;
+  if (primeira) return;
+  await Promise.all([carregarListas(), carregarCatalogo(), carregarMembros()]);
+  await carregarItens(); renderAll();
 }
-// ao voltar para o app, atualiza tudo (o celular pode ter suspendido a conexão)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && fam) adiar('tudo', async () => { await Promise.all([carregarListas(), carregarCatalogo()]); await carregarItens(); });
-});
+function acompanhar() {
+  clearInterval(pollT);
+  if (!fam) return;
+  verificar();
+  pollT = setInterval(verificar, POLL_MS);
+}
+// ao voltar para o app, verifica na hora
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verificar(); });
+// depois de uma ação própria, considera a versão atual para não recarregar à toa
+async function sincronizar() { const { data } = await sb.rpc('versao_familia', { p_familia: fam.id }); if (data != null) versao = data; }
 
 /* ---------- catálogo ---------- */
 function fullCatalog() {
@@ -156,7 +164,8 @@ function fullCatalog() {
 const findCat = name => { const k = norm(name); return fullCatalog().find(c => norm(c.name) === k); };
 
 /* ---------- ações ---------- */
-async function addItem(name, section, qty, silent) {
+async function addItem(...a) { ocupado++; try { return await _addItem(...a); } finally { ocupado--; sincronizar(); } }
+async function _addItem(name, section, qty, silent) {
   const k = norm(name);
   const dup = itens.find(i => norm(i.nome) === k && !i.comprado);
   if (dup) { flashId = dup.id; renderList(); if (!silent) toast(`${dup.nome} já está na lista`); return true; }
@@ -178,19 +187,22 @@ async function addItem(name, section, qty, silent) {
   if (!silent) toast(`${name} adicionado`);
   return true;
 }
-async function toggleItem(it) {
+async function toggleItem(it) { ocupado++; try { await _toggleItem(it); } finally { ocupado--; sincronizar(); } }
+async function _toggleItem(it) {
   const patch = it.comprado ? { comprado: false, comprado_por: null, comprado_em: null } : { comprado: true, comprado_por: me, comprado_em: new Date().toISOString() };
   Object.assign(it, patch); renderAll();
   const { error } = await sb.from('itens').update(patch).eq('id', it.id);
   if (error) { toast(msgErro(error)); await carregarItens(); renderAll(); }
 }
-async function removeItem(it) {
+async function removeItem(it) { ocupado++; try { await _removeItem(it); } finally { ocupado--; sincronizar(); } }
+async function _removeItem(it) {
   itens = itens.filter(i => i.id !== it.id); renderAll();
   const { error } = await sb.from('itens').delete().eq('id', it.id);
   if (error) { toast(msgErro(error)); await carregarItens(); renderAll(); }
   else toast(`${it.nome} removido`);
 }
-async function finalizar(levar) {
+async function finalizar(levar) { ocupado++; try { await _finalizar(levar); } finally { ocupado--; sincronizar(); } }
+async function _finalizar(levar) {
   closeSheet();
   if (!curId) return;
   const pend = itens.filter(i => !i.comprado).length;
@@ -378,8 +390,8 @@ $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeS
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
 
 /* ---------- início ---------- */
-if (!cfg.supabaseUrl || !cfg.supabaseKey) {
-  document.body.innerHTML = '<div class="wrap gate"><div class="card"><h2>Configuração pendente</h2><p>Preencha o endereço e a chave do Supabase em config.js.</p></div></div>';
+if (!sb) {
+  document.body.innerHTML = '<div class="wrap gate"><div class="card"><h2>Configuração pendente</h2><p>Defina a variável VITE_NEON_URL com o endereço do banco no Neon.</p></div></div>';
 } else {
   let iniciado = false;
   sb.auth.onAuthStateChange((evt, s) => {
@@ -387,7 +399,7 @@ if (!cfg.supabaseUrl || !cfg.supabaseKey) {
     session = s;
     if (!iniciado || mudouUsuario) {
       iniciado = true;
-      if (!s) { fam = null; loaded = false; if (channel) sb.removeChannel(channel); channel = null; }
+      if (!s) { fam = null; loaded = false; clearInterval(pollT); }
       setTimeout(iniciar, 0);
     }
   });

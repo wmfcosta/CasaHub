@@ -14,25 +14,32 @@ App para organizar o dia a dia da família. Primeiro módulo: **lista de compras
 
 | Pasta/arquivo | Conteúdo |
 |---|---|
-| `public/` | App web estático (HTML, CSS, JS) publicado pela Vercel |
-| `public/config.js` | Endereço e chave pública do Supabase |
-| `public/catalogo.js` | Seções e itens comuns |
-| `supabase/migrations/` | Tabelas, regras de acesso (RLS), funções e rotina de limpeza |
+| `index.html`, `src/` | App web (HTML, CSS, JS), empacotado com Vite |
+| `src/catalogo.js` | Seções e itens comuns |
+| `public/` | Ícones, manifesto do app instalável e service worker |
+| `db/0001_casahub.sql` | Tabelas, regras de acesso (RLS) e funções do banco |
 
-## Banco (Supabase)
+## Banco (Neon)
 
-Tabelas: `familias`, `membros`, `listas`, `itens`, `catalogo`. Todas com RLS: só membros da família leem e alteram os dados dela.
+- **Neon Auth** (login por código enviado ao e-mail) e **Data API** (acesso do navegador ao banco).
+- Tabelas: `familias`, `membros`, `listas`, `itens`, `catalogo`, todas com RLS: só membros da família leem e alteram os dados dela. O usuário é identificado por `auth.user_id()`.
+- Funções chamadas pelo app: `criar_familia`, `entrar_familia`, `lista_aberta`, `finalizar_lista`, `versao_familia`.
+- Histórico de 5 semanas: listas finalizadas há mais de 35 dias são apagadas sempre que a família abre ou finaliza uma lista.
+- Atualização entre celulares: com o app aberto, ele consulta `versao_familia` a cada 4 segundos e recarrega só quando algo mudou.
 
-Funções chamadas pelo app: `criar_familia`, `entrar_familia`, `lista_aberta`, `finalizar_lista`.
-A rotina `casahub-limpar-historico` (pg_cron, diária) apaga listas finalizadas há mais de 35 dias.
+## Configuração
 
-### Configuração de login no painel do Supabase
+Variável de ambiente (Vercel e `.env` local):
 
-1. **Authentication → URL Configuration**: em *Site URL* coloque o endereço da Vercel; adicione o mesmo em *Redirect URLs*.
-2. **Authentication → Email Templates → Magic Link**: inclua `{{ .Token }}` no corpo do e-mail para o código de 6 dígitos aparecer (o app usa o código, que funciona também no app instalado no iPhone).
+```
+VITE_NEON_URL=https://ep-xxxx.c-2.sa-east-1.aws.neon.tech/neondb
+```
+
+É o endereço do Data API sem `.apirest` no host e sem `/rest/v1` no fim.
 
 ## Rodar localmente
 
 ```
-npx serve public
+npm install
+npm run dev
 ```
