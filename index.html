@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CasaHub</title>
-<meta name="description" content="Lista de compras compartilhada da família">
+<meta name="description" content="Lista de compras e passeios da família">
 <meta name="theme-color" content="#F3F6F2" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,7 +22,7 @@
 <!-- Login -->
 <section class="wrap gate" id="scr-login" hidden>
   <div class="logo"><img src="/icons/icon-192.png" alt=""><h1>CasaHub</h1></div>
-  <p class="lead">A lista de compras da família, sempre atualizada no celular de todo mundo.</p>
+  <p class="lead">A lista de compras e os passeios da família, sempre atualizados no celular de todo mundo.</p>
   <form class="card" id="fEmail">
     <h2>Entrar</h2>
     <p>Digite seu e-mail. Vamos enviar um código de 6 dígitos para você entrar, sem senha.</p>
@@ -80,6 +80,7 @@
       <nav class="tabs" aria-label="Seções">
         <a href="#lista" id="tab-lista">Lista</a>
         <a href="#historico" id="tab-historico">Histórico</a>
+        <a href="#passeios" id="tab-passeios">Passeios</a>
         <a href="#familia" id="tab-familia">Família</a>
       </nav>
       <form class="add" id="addForm" autocomplete="off">
@@ -110,6 +111,39 @@
       <main class="stack">
         <p class="status">Listas finalizadas ficam guardadas por 5 semanas.</p>
         <div class="hist" id="hist"></div>
+      </main>
+    </section>
+
+    <section id="view-passeios" hidden>
+      <main class="stack pas">
+        <div class="card pstate" id="pCasa" hidden>
+          <span class="pill home">Em casa</span>
+          <h2>Você está em casa</h2>
+          <p id="pUltima"></p>
+        </div>
+        <div class="card pstate out" id="pFora" hidden>
+          <span class="pill">Fora de casa</span>
+          <h2 id="pOnde"></h2>
+          <p id="pDesde"></p>
+          <ol class="pstops" id="pStops"></ol>
+          <button class="btn" id="pVoltar" type="button">Voltei para casa</button>
+        </div>
+        <form class="card" id="fChegar" autocomplete="off">
+          <h2 id="pChegarT">Chegou em algum lugar?</h2>
+          <label class="sr" for="pLocal">Lugar</label>
+          <input class="inp" id="pLocal" list="pLocais" maxlength="80" placeholder="Onde você está? (ex.: Pé na Areia)" enterkeyhint="send" required>
+          <datalist id="pLocais"></datalist>
+          <button class="btn" id="pChegarB" type="submit">Registrar chegada</button>
+          <p class="pnote">A data e a hora entram sozinhas, no momento do toque, e não podem ser alteradas depois.</p>
+        </form>
+        <section class="group">
+          <h2>Fora de casa agora</h2>
+          <div id="pAgora"></div>
+        </section>
+        <section class="group">
+          <h2>Últimos 30 dias</h2>
+          <div class="phist" id="pHist"></div>
+        </section>
       </main>
     </section>
 

@@ -1,6 +1,6 @@
 # CasaHub
 
-App para organizar o dia a dia da família. Primeiro módulo: **lista de compras compartilhada**.
+App para organizar o dia a dia da família. Módulos: **lista de compras compartilhada** e **passeios**.
 
 - Cada pessoa entra com o próprio e-mail (código de 6 dígitos, sem senha).
 - Uma família é criada por alguém, que compartilha um **código de convite** com os outros.
@@ -9,6 +9,15 @@ App para organizar o dia a dia da família. Primeiro módulo: **lista de compras
 - Ao finalizar, a lista vai para o histórico; os itens não comprados podem passar para a próxima lista.
 - Histórico guardado por 5 semanas (limpeza diária automática no banco).
 - Instalável no Android e no iPhone pela opção "Adicionar à tela de início" (PWA).
+
+## Passeios
+
+- Cada pessoa registra, no próprio celular, a chegada em um lugar (ex.: "Pé na Areia") e depois a volta para casa.
+- A data e a hora **não são digitadas**: vêm do relógio do servidor no momento do toque. Mudar o relógio do celular não altera o registro.
+- Os registros não podem ser incluídos, editados ou apagados pelo app; só pelas funções `passeio_chegar` e `passeio_voltar`.
+- Um passeio pode ter várias paradas ("Mudou de lugar?"). Toque repetido no mesmo lugar em menos de 2 minutos não duplica.
+- A aba mostra quem está fora de casa agora e os passeios dos últimos 30 dias.
+- Tabelas: `passeios`, `passeio_paradas` (`db/0002_passeios.sql`).
 
 ## Estrutura
 

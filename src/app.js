@@ -24,6 +24,7 @@ const secOf = s => SECMAP[s] ? s : 'outros';
 
 let session = null, me = null, fam = null, membros = [];
 let listas = [], itens = [], catalogo = [], curId = null;
+let passeios = [], paradas = [];
 let loaded = false, flashId = null, secFilter = 'todos', pollT = null, versao = null;
 
 /* ---------- utilidades ---------- */
@@ -87,7 +88,7 @@ $('#lBack').addEventListener('click', () => { $('#fCode').hidden = true; $('#fEm
 for (const id of ['#logout', '#oLogout']) $(id).addEventListener('click', async () => {
   await sb.auth.signOut();
   session = null; me = null; fam = null; loaded = false; clearInterval(pollT); ultimoOk = 0;
-  curId = null; itens = []; listas = []; membros = []; catalogo = []; versao = null;
+  curId = null; itens = []; listas = []; membros = []; catalogo = []; passeios = []; paradas = []; versao = null;
   location.hash = ''; screen('login');
 });
 
@@ -139,7 +140,7 @@ async function abrirFamilia(id) {
   $('#famName').textContent = fam.nome;
   $('#invCode').textContent = fam.codigo_convite;
   screen('app'); route();
-  await Promise.all([carregarMembros(), carregarListas(), carregarCatalogo()]);
+  await Promise.all([carregarMembros(), carregarListas(), carregarCatalogo(), carregarPasseios()]);
   loaded = true; renderAll();
   versao = null; acompanhar();
 }
@@ -180,7 +181,7 @@ async function verificar() {
   versao = data;
   // também na primeira checagem: se a carga inicial veio vazia porque o banco
   // tinha acabado de acordar, ela se corrige aqui
-  await Promise.all([carregarListas(), carregarCatalogo(), carregarMembros()]);
+  await Promise.all([carregarListas(), carregarCatalogo(), carregarMembros(), carregarPasseios()]);
   await carregarItens(); renderAll();
 }
 function acompanhar() {
@@ -255,13 +256,14 @@ async function _finalizar(levar) {
 
 /* ---------- navegação ---------- */
 function route() {
-  const v = ['historico', 'familia'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'lista';
-  for (const n of ['lista', 'historico', 'familia']) {
+  const v = ['historico', 'passeios', 'familia'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'lista';
+  for (const n of ['lista', 'historico', 'passeios', 'familia']) {
     $('#view-' + n).hidden = n !== v;
     const t = $('#tab-' + n); n === v ? t.setAttribute('aria-current', 'page') : t.removeAttribute('aria-current');
   }
   $('#addForm').hidden = v !== 'lista'; $('#bar').hidden = v !== 'lista';
   if (v === 'historico') renderHist();
+  if (v === 'passeios') renderPasseios();
 }
 addEventListener('hashchange', route);
 
@@ -311,7 +313,7 @@ $('#addForm').addEventListener('submit', async e => {
 });
 
 /* ---------- render ---------- */
-function renderAll() { renderStatus(); renderChips(); renderList(); if (!$('#view-historico').hidden) renderHist(); renderFamilia(); }
+function renderAll() { renderStatus(); renderChips(); renderList(); if (!$('#view-historico').hidden) renderHist(); renderPasseios(); renderFamilia(); }
 
 function renderStatus() {
   const cur = listas.find(l => l.id === curId);
@@ -412,6 +414,139 @@ function renderFamilia() {
   const meu = membros.find(m => m.user_id === me);
   if (meu && document.activeElement !== $('#myName')) $('#myName').value = meu.nome;
 }
+
+/* ---------- passeios ---------- */
+// A hora de chegada e de volta é gravada pelo próprio banco (relógio do servidor) no
+// momento do toque. O app não envia horário nenhum e ninguém pode editar os registros.
+const DIAS_PAS = 30;
+const fmtH = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const mesmoDia = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+function fmtDur(ms) {
+  const m = Math.max(0, Math.round(ms / 6e4));
+  if (m < 1) return "menos de 1 min";
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? `${h}h${String(r).padStart(2, '0')}` : `${h}h`;
+}
+function diaRel(t) {
+  const d = new Date(t), hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const d0 = new Date(d); d0.setHours(0, 0, 0, 0);
+  const n = Math.round((hoje - d0) / DIA);
+  return n === 0 ? 'hoje' : n === 1 ? 'ontem' : fmtDW(t);
+}
+// "às 14:32" no mesmo dia; "ontem às 22:10" ou "qua., 04/11 às 22:10" em outro dia
+const quando = (t, ref = Date.now()) => mesmoDia(t, ref) ? `às ${fmtH(t)}` : `${diaRel(t)} às ${fmtH(t)}`;
+
+async function carregarPasseios() {
+  if (!fam) return;
+  const desde = new Date(Date.now() - DIAS_PAS * DIA).toISOString();
+  const [a, b] = await Promise.all([
+    sb.from('passeios').select('id,user_id,iniciado_em,voltou_em').eq('familia_id', fam.id).gte('iniciado_em', desde).order('iniciado_em', { ascending: false }).limit(300),
+    sb.from('passeio_paradas').select('passeio_id,local,chegou_em').eq('familia_id', fam.id).gte('chegou_em', desde).order('chegou_em').limit(1000),
+  ]);
+  if (a.error || b.error) return;
+  passeios = a.data; paradas = b.data;
+}
+const paradasDe = id => paradas.filter(p => p.passeio_id === id);
+const meuAberto = () => passeios.find(p => p.user_id === me && !p.voltou_em);
+
+let pBusy = false, locaisHtml = null;
+async function chegar(local) {
+  if (pBusy) return; pBusy = true; ocupado++;
+  const b = $('#pChegarB'); b.disabled = true;
+  try {
+    await acordar();
+    const { data, error } = await sb.rpc('passeio_chegar', { p_familia: fam.id, p_local: local });
+    if (error) return toast(msgErro(error));
+    $('#pLocal').value = '';
+    await carregarPasseios(); renderPasseios();
+    toast(`Chegada em ${local} registrada ${quando(data)}`);
+  } finally { pBusy = false; ocupado--; b.disabled = false; sincronizar(); }
+}
+async function voltar() {
+  if (pBusy) return; pBusy = true; ocupado++;
+  const b = $('#pVoltar'); b.disabled = true;
+  try {
+    await acordar();
+    const { data, error } = await sb.rpc('passeio_voltar', { p_familia: fam.id });
+    if (error) { toast(msgErro(error)); await carregarPasseios(); renderPasseios(); return; }
+    await carregarPasseios(); renderPasseios();
+    toast(`Volta para casa registrada ${quando(data)}`);
+  } finally { pBusy = false; ocupado--; b.disabled = false; desarmarVolta(); sincronizar(); }
+}
+
+$('#fChegar').addEventListener('submit', e => {
+  e.preventDefault();
+  const local = $('#pLocal').value.replace(/\s+/g, ' ').trim();
+  if (!local) return $('#pLocal').focus();
+  chegar(local);
+});
+// "Voltei para casa" pede um segundo toque, porque o registro não pode ser desfeito
+let voltaArm = null;
+function desarmarVolta() { clearTimeout(voltaArm); voltaArm = null; const b = $('#pVoltar'); b.classList.remove('confirm'); b.textContent = 'Voltei para casa'; }
+$('#pVoltar').addEventListener('click', () => {
+  const b = $('#pVoltar');
+  if (!voltaArm) { b.classList.add('confirm'); b.textContent = 'Toque de novo para confirmar'; voltaArm = setTimeout(desarmarVolta, 4000); return; }
+  clearTimeout(voltaArm); voltar();
+});
+
+function renderPasseios() {
+  if (!fam || $('#view-passeios').hidden) return;
+  const agora = Date.now();
+  const aberto = meuAberto();
+
+  // meu estado
+  $('#pCasa').hidden = !!aberto; $('#pFora').hidden = !aberto;
+  if (aberto) {
+    const ps = paradasDe(aberto.id), ult = ps[ps.length - 1];
+    $('#pOnde').textContent = ult ? ult.local : 'Fora de casa';
+    $('#pDesde').textContent = ult ? `Chegou ${quando(ult.chegou_em)} · há ${fmtDur(agora - ts(ult.chegou_em))}` : '';
+    $('#pStops').innerHTML = ps.length > 1 ? ps.slice(0, -1).map(p => `<li><b>${fmtH(p.chegou_em)}</b><span>${esc(p.local)}</span></li>`).join('') : '';
+    $('#pChegarT').textContent = 'Mudou de lugar?';
+    $('#pChegarB').textContent = 'Registrar chegada no novo lugar';
+  } else {
+    const ultimo = passeios.find(p => p.user_id === me && p.voltou_em);
+    $('#pUltima').textContent = ultimo ? `Última volta registrada ${quando(ultimo.voltou_em)}.` : 'Quando sair, registre aqui cada lugar em que chegar.';
+    $('#pChegarT').textContent = 'Chegou em algum lugar?';
+    $('#pChegarB').textContent = 'Registrar chegada';
+  }
+
+  // sugestões de lugares já usados pela família
+  const locais = [...new Map([...paradas].reverse().map(p => [norm(p.local), p.local])).values()].slice(0, 30);
+  const opts = locais.map(l => `<option value="${esc(l)}">`).join('');
+  if (opts !== locaisHtml) { locaisHtml = opts; $('#pLocais').innerHTML = opts; }
+
+  const linha = (p, live) => {
+    const ps = paradasDe(p.id), ult = ps[ps.length - 1];
+    const nome = nomeDe(p.user_id);
+    const ini = ps[0]?.chegou_em || p.iniciado_em;
+    const when = live ? `há ${fmtDur(agora - ts(ult?.chegou_em || ini))}`
+      : `${fmtH(ini)} → ${mesmoDia(ini, p.voltou_em) ? fmtH(p.voltou_em) : `${diaRel(p.voltou_em)} ${fmtH(p.voltou_em)}`}`;
+    const where = live
+      ? `${ult ? `${esc(ult.local)} desde ${fmtH(ult.chegou_em)}` : 'fora de casa'}${ps.length > 1 ? ` · antes: ${ps.slice(0, -1).map(x => `${esc(x.local)} ${fmtH(x.chegou_em)}`).join(', ')}` : ''}`
+      : `${ps.map(x => `${esc(x.local)} ${fmtH(x.chegou_em)}`).join(' · ') || 'sem lugar registrado'} · voltou para casa ${fmtH(p.voltou_em)} · ${fmtDur(ts(p.voltou_em) - ts(ini))} fora`;
+    return `<div class="prow${live ? ' live' : ''}"><span class="av">${esc((nome || '?').trim().charAt(0).toUpperCase())}</span>
+      <span class="who">${esc(nome === 'você' ? 'Você' : nome)}</span><span class="when">${when}</span>
+      <span class="where">${where}</span></div>`;
+  };
+
+  // quem está fora agora
+  const fora = passeios.filter(p => !p.voltou_em).sort((a, b) => ts(a.iniciado_em) - ts(b.iniciado_em));
+  $('#pAgora').innerHTML = fora.length ? `<div class="plist">${fora.map(p => linha(p, true)).join('')}</div>`
+    : '<p class="pvazio">Ninguém com passeio em andamento.</p>';
+
+  // histórico dos passeios encerrados, por dia
+  const fechados = passeios.filter(p => p.voltou_em);
+  if (!fechados.length) { $('#pHist').innerHTML = '<p class="pvazio">Nenhum passeio encerrado ainda.</p>'; return; }
+  const dias = new Map();
+  for (const p of fechados) {
+    const k = new Date(p.iniciado_em).toDateString();
+    if (!dias.has(k)) dias.set(k, []); dias.get(k).push(p);
+  }
+  $('#pHist').innerHTML = [...dias.values()].map(g => `<div><h3>${diaRel(g[0].iniciado_em)}</h3><div class="plist">${g.map(p => linha(p, false)).join('')}</div></div>`).join('');
+}
+// atualiza o "há X min" enquanto a aba está aberta
+setInterval(() => { if (document.visibilityState === 'visible') renderPasseios(); }, 30000);
 
 /* ---------- finalizar ---------- */
 function closeSheet() { $('#sheet').hidden = true; $('#finBtn').focus(); }

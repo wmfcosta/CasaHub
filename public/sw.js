@@ -1,5 +1,5 @@
-// Guarda a casca do app para abrir rápido; os dados sempre vêm do Supabase.
-const CACHE = 'casahub-v3';
+// Guarda a casca do app para abrir rápido; os dados sempre vêm do banco.
+const CACHE = 'casahub-v4';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
