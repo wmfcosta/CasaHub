@@ -74,12 +74,21 @@ $('#fEmail').addEventListener('submit', async e => {
 $('#fCode').addEventListener('submit', async e => {
   e.preventDefault();
   const b = $('#lVerify'); b.disabled = true; showErr($('#cErr'), '');
-  const { error } = await sb.auth.verifyOtp({ email: emailAtual, token: $('#lCode').value.trim(), type: 'email' });
+  const { data, error } = await sb.auth.verifyOtp({ email: emailAtual, token: $('#lCode').value.trim(), type: 'email' });
+  if (error) { b.disabled = false; return showErr($('#cErr'), msgErro(error)); }
+  // o kit do Neon não avisa a troca de sessão após o código; seguimos direto
+  const s = data?.session || (await sb.auth.getSession()).data?.session;
   b.disabled = false;
-  if (error) showErr($('#cErr'), msgErro(error));
+  if (!s) return showErr($('#cErr'), 'O código foi aceito, mas o navegador não guardou o login. Atualize a página e tente de novo.');
+  session = s; $('#lCode').value = ''; $('#fCode').hidden = true; $('#fEmail').hidden = false;
+  await iniciar();
 });
 $('#lBack').addEventListener('click', () => { $('#fCode').hidden = true; $('#fEmail').hidden = false; $('#lCode').value = ''; });
-for (const id of ['#logout', '#oLogout']) $(id).addEventListener('click', () => sb.auth.signOut());
+for (const id of ['#logout', '#oLogout']) $(id).addEventListener('click', async () => {
+  await sb.auth.signOut();
+  session = null; me = null; fam = null; loaded = false; clearInterval(pollT); ultimoOk = 0;
+  location.hash = ''; screen('login');
+});
 
 /* ---------- família ---------- */
 $('#fJoin').addEventListener('submit', async e => {
