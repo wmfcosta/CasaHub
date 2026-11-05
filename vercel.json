@@ -4,6 +4,29 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "headers": [
-    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/api/auth/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "https://ep-sweet-mouse-b6y8t2xa.neonauth.c-2.sa-east-1.aws.neon.tech/neondb/auth/:path*"
+    }
   ]
 }

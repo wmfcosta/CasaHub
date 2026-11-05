@@ -5,7 +5,11 @@ import './styles.css';
 // Endereço do banco no Neon (sem usuário/senha). O login e o acesso aos dados
 // são controlados pelo Neon Auth e pelas regras de linha (RLS) do banco.
 const NEON_URL = import.meta.env.VITE_NEON_URL;
-const sb = NEON_URL ? createClient(NEON_URL) : null;
+// O login passa pelo próprio endereço do app (/api/auth, repassado pela Vercel ao Neon).
+// Assim o cookie de sessão é "do próprio site" e o Safari/iPhone não o bloqueia.
+// Em localhost (desenvolvimento) o app fala direto com o Neon.
+const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+const sb = NEON_URL ? createClient(NEON_URL, local ? {} : { auth: { url: location.origin + '/api/auth' } }) : null;
 const POLL_MS = 4000;
 
 const DIAS_HIST = 35, DIA = 864e5;

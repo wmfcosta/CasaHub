@@ -1,5 +1,5 @@
 // Guarda a casca do app para abrir rápido; os dados sempre vêm do Supabase.
-const CACHE = 'casahub-v2';
+const CACHE = 'casahub-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
@@ -8,7 +8,7 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return;
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api/')) return;
   // rede primeiro, cache como reserva sem internet
   e.respondWith(fetch(e.request).then(r => {
     const copia = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copia)); return r;
