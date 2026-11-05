@@ -53,43 +53,98 @@ function screen(id) { for (const s of ['login', 'onboard', 'app']) $('#scr-' + s
 const nomeDe = id => !id ? 'alguém' : id === me ? 'você' : (membros.find(m => m.user_id === id)?.nome || 'alguém');
 function msgErro(e) {
   const m = (e && (e.message || e.error_description)) || '';
-  if (/rate limit|security purposes/i.test(m)) return 'Muitas tentativas. Aguarde um minuto e tente de novo.';
-  if (/retrieve session|session not found/i.test(m)) return 'O código foi aceito, mas o navegador não guardou o login. Atualize a página e tente de novo.';
-  if (/expired|invalid|incorrect/i.test(m) && /token|otp|code|código/i.test(m)) return 'Código inválido ou vencido. Peça um novo código.';
-  if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão. Verifique a internet e tente de novo.';
+  const c = (e && e.code) || '';
+  if (/rate limit|security purposes|too many/i.test(m + c)) return 'Muitas tentativas. Aguarde um minuto e tente de novo.';
+  if (/INVALID_EMAIL_OR_PASSWORD|invalid email or password|invalid_credentials|invalid login/i.test(m + ' ' + c)) return 'E-mail ou senha incorretos. Se você entrava com código, use "Criar senha".';
+  if (/already exists|already registered|user_already_exists/i.test(m + ' ' + c)) return 'Este e-mail já tem conta. Toque em "Já tenho conta" ou, se ainda não tem senha, em "Criar senha".';
+  if (/PASSWORD_TOO_SHORT|password.*short|weak_password/i.test(m + ' ' + c)) return 'A senha precisa ter pelo menos 8 caracteres.';
+  if (/PASSWORD_TOO_LONG|password.*long/i.test(m + ' ' + c)) return 'Senha muito longa. Use até 128 caracteres.';
+  if (/retrieve session|session not found/i.test(m)) return 'O navegador não guardou o login. Atualize a página e tente de novo.';
+  if (/expired|invalid|incorrect|TOO_MANY_ATTEMPTS/i.test(m + ' ' + c) && /token|otp|code|código/i.test(m + ' ' + c)) return 'Código inválido ou vencido. Peça um novo código.';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Sem conexão. Verifique a internet e tente de novo.';
   return m || 'Algo deu errado. Tente de novo.';
 }
 
-/* ---------- login ---------- */
-let emailAtual = '';
-$('#fEmail').addEventListener('submit', async e => {
-  e.preventDefault();
-  emailAtual = $('#lEmail').value.trim().toLowerCase();
-  const b = $('#lSend'); b.disabled = true; showErr($('#lErr'), '');
-  const { error } = await sb.auth.signInWithOtp({ email: emailAtual });
-  b.disabled = false;
-  if (error) return showErr($('#lErr'), msgErro(error));
-  $('#codeMsg').textContent = `Enviamos um código para ${emailAtual}. Confira também a caixa de spam.`;
-  $('#fEmail').hidden = true; $('#fCode').hidden = false; $('#lCode').focus();
-});
-$('#fCode').addEventListener('submit', async e => {
-  e.preventDefault();
-  const b = $('#lVerify'); b.disabled = true; showErr($('#cErr'), '');
-  const { data, error } = await sb.auth.verifyOtp({ email: emailAtual, token: $('#lCode').value.trim(), type: 'email' });
-  if (error) { b.disabled = false; return showErr($('#cErr'), msgErro(error)); }
-  // o kit do Neon não avisa a troca de sessão após o código; seguimos direto
-  const s = data?.session || (await sb.auth.getSession()).data?.session;
-  b.disabled = false;
-  if (!s) return showErr($('#cErr'), 'O código foi aceito, mas o navegador não guardou o login. Atualize a página e tente de novo.');
-  session = s; $('#lCode').value = ''; $('#fCode').hidden = true; $('#fEmail').hidden = false;
+/* ---------- login com e-mail e senha ---------- */
+const AUTH = local ? null : location.origin + '/api/auth';
+// chamadas do login que o kit do Neon não expõe (criar senha por código enviado ao e-mail)
+async function authPost(caminho, corpo) {
+  try {
+    const r = await fetch(`${AUTH}/${caminho}`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? { data: j, error: null } : { data: null, error: { message: j.message || `Erro ${r.status}`, code: j.code } };
+  } catch (err) { return { data: null, error: err }; }
+}
+function pane(nome) {
+  for (const f of document.querySelectorAll('#scr-login [data-pane]')) f.hidden = f.dataset.pane !== nome;
+  for (const el of document.querySelectorAll('#scr-login .err')) el.hidden = true;
+  const em = $('#lEmail').value || $('#cEmail').value || $('#sEmail').value;
+  for (const id of ['#lEmail', '#cEmail', '#sEmail']) if (!$(id).value) $(id).value = em;
+  const foco = { login: '#lEmail', cadastro: '#cEmail', senha: '#sEmail', nova: '#nCode' }[nome];
+  setTimeout(() => { const f = $(foco); if (nome === 'login' && f.value) $('#lPass').focus(); else f.focus(); }, 0);
+}
+document.querySelectorAll('#scr-login [data-go]').forEach(b => b.addEventListener('click', () => pane(b.dataset.go)));
+document.querySelectorAll('#scr-login .eye').forEach(b => b.addEventListener('click', () => {
+  const i = b.previousElementSibling, ver = i.type === 'password';
+  i.type = ver ? 'text' : 'password'; b.textContent = ver ? 'Ocultar' : 'Ver'; b.setAttribute('aria-label', ver ? 'Ocultar senha' : 'Mostrar senha');
+}));
+const emailDe = id => $(id).value.trim().toLowerCase();
+
+async function entrarComSenha(email, senha, errEl) {
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+  if (error) { showErr(errEl, msgErro(error)); return false; }
+  session = data?.session || (await sb.auth.getSession()).data?.session;
+  if (!session) { showErr(errEl, msgErro({ message: 'session not found' })); return false; }
+  for (const id of ['#lPass', '#cPass', '#nPass', '#nCode']) $(id).value = '';
+  pane('login');
   await iniciar();
+  return true;
+}
+$('#fLogin').addEventListener('submit', async e => {
+  e.preventDefault();
+  const b = $('#lBtn'); b.disabled = true; showErr($('#lErr'), '');
+  try { await entrarComSenha(emailDe('#lEmail'), $('#lPass').value, $('#lErr')); } finally { b.disabled = false; }
 });
-$('#lBack').addEventListener('click', () => { $('#fCode').hidden = true; $('#fEmail').hidden = false; $('#lCode').value = ''; });
+$('#fCadastro').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = emailDe('#cEmail'), senha = $('#cPass').value;
+  if (senha.length < 8) return showErr($('#cadErr'), 'A senha precisa ter pelo menos 8 caracteres.');
+  const b = $('#cBtn'); b.disabled = true; showErr($('#cadErr'), '');
+  try {
+    const { error } = await sb.auth.signUp({ email, password: senha, options: { data: { displayName: email.split('@')[0] } } });
+    if (error) return showErr($('#cadErr'), msgErro(error));
+    await entrarComSenha(email, senha, $('#cadErr'));
+  } finally { b.disabled = false; }
+});
+let emailSenha = '';
+$('#fSenha').addEventListener('submit', async e => {
+  e.preventDefault();
+  emailSenha = emailDe('#sEmail');
+  const b = $('#sSend'); b.disabled = true; showErr($('#sErr'), '');
+  const { error } = await authPost('email-otp/send-verification-otp', { email: emailSenha, type: 'forget-password' });
+  b.disabled = false;
+  if (error) return showErr($('#sErr'), msgErro(error));
+  $('#nMsg').textContent = `Se ${emailSenha} tiver conta no CasaHub, o código chega em instantes. Confira também a caixa de spam.`;
+  $('#nUser').value = emailSenha;
+  pane('nova');
+});
+$('#fNova').addEventListener('submit', async e => {
+  e.preventDefault();
+  const senha = $('#nPass').value;
+  if (senha.length < 8) return showErr($('#nErr'), 'A senha precisa ter pelo menos 8 caracteres.');
+  const b = $('#nBtn'); b.disabled = true; showErr($('#nErr'), '');
+  try {
+    const { error } = await authPost('email-otp/reset-password', { email: emailSenha, otp: $('#nCode').value.trim(), password: senha });
+    if (error) return showErr($('#nErr'), msgErro(error));
+    $('#lEmail').value = emailSenha;
+    if (await entrarComSenha(emailSenha, senha, $('#nErr'))) toast('Senha criada. Nas próximas vezes, entre com e-mail e senha.');
+  } finally { b.disabled = false; }
+});
 for (const id of ['#logout', '#oLogout']) $(id).addEventListener('click', async () => {
   await sb.auth.signOut();
   session = null; me = null; fam = null; loaded = false; clearInterval(pollT); ultimoOk = 0;
   curId = null; itens = []; listas = []; membros = []; catalogo = []; passeios = []; paradas = []; versao = null;
-  location.hash = ''; screen('login');
+  location.hash = ''; screen('login'); pane('login');
 });
 
 /* ---------- família ---------- */

@@ -36,7 +36,12 @@ export default async function handler(request) {
     saida.set(k, v);
   }
   const cookies = typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : [];
-  for (const c of cookies) saida.append('set-cookie', c);
+  // O login passa pelo próprio domínio do app, então o cookie não precisa ser
+  // "de terceiros". Sem SameSite=None e sem Partitioned, o iPhone e o Android
+  // guardam o login normalmente entre uma abertura e outra do app.
+  for (const c of cookies) {
+    saida.append('set-cookie', c.replace(/;\s*Partitioned/gi, '').replace(/SameSite=None/gi, 'SameSite=Lax'));
+  }
   saida.set('cache-control', 'no-store');
 
   return new Response(resp.body, { status: resp.status, headers: saida });

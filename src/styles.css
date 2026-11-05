@@ -43,8 +43,13 @@ button{cursor:pointer}
 .inp{width:100%;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;min-width:0}
 .inp:focus{border-color:var(--accent);outline:none}
 .code{letter-spacing:.4em;font-size:1.4rem;text-align:center;font-variant-numeric:tabular-nums;text-transform:uppercase}
+.lbl{font-size:.85rem;font-weight:600;margin:4px 0 -6px}
+.pw{position:relative}
+.pw .inp{padding-right:84px}
+.eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--accent);font-weight:600;font-size:.85rem;padding:8px 10px;border-radius:8px}
+#scr-login .link{font-size:.9rem;text-align:left}
 .link{background:none;border:0;color:var(--accent);font-weight:600;padding:4px 0;justify-self:start}
-.err{color:var(--danger);font-size:.9rem;margin:0}
+.err,.card .err{color:var(--danger);font-size:.9rem;margin:0}
 .or{text-align:center;color:var(--muted);font-size:.85rem}
 
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:16px 10px;display:grid;gap:12px}

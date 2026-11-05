@@ -23,22 +23,53 @@
 <section class="wrap gate" id="scr-login" hidden>
   <div class="logo"><img src="/icons/icon-192.png" alt=""><h1>CasaHub</h1></div>
   <p class="lead">A lista de compras e os passeios da família, sempre atualizados no celular de todo mundo.</p>
-  <form class="card" id="fEmail">
+  <!-- Entrar com e-mail e senha -->
+  <form class="card" id="fLogin" data-pane="login">
     <h2>Entrar</h2>
-    <p>Digite seu e-mail. Vamos enviar um código de 6 dígitos para você entrar, sem senha.</p>
-    <label class="sr" for="lEmail">E-mail</label>
-    <input class="inp" id="lEmail" type="email" inputmode="email" autocomplete="email" placeholder="seu@email.com" required>
-    <button class="btn" id="lSend" type="submit">Enviar código</button>
+    <label class="lbl" for="lEmail">E-mail</label>
+    <input class="inp" id="lEmail" name="email" type="email" inputmode="email" autocomplete="username" placeholder="seu@email.com" required>
+    <label class="lbl" for="lPass">Senha</label>
+    <div class="pw"><input class="inp" id="lPass" name="password" type="password" autocomplete="current-password" required><button class="eye" type="button" aria-label="Mostrar senha">Ver</button></div>
+    <button class="btn" id="lBtn" type="submit">Entrar</button>
     <p class="err" id="lErr" hidden></p>
+    <button class="link" type="button" data-go="senha">Ainda não tem senha ou esqueceu? Criar senha</button>
+    <button class="link" type="button" data-go="cadastro">Primeira vez no CasaHub? Criar conta</button>
   </form>
-  <form class="card" id="fCode" hidden>
-    <h2>Digite o código</h2>
-    <p id="codeMsg"></p>
-    <label class="sr" for="lCode">Código</label>
-    <input class="inp code" id="lCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" required>
-    <button class="btn" id="lVerify" type="submit">Entrar</button>
-    <p class="err" id="cErr" hidden></p>
-    <button class="link" id="lBack" type="button">Usar outro e-mail</button>
+
+  <!-- Criar conta nova -->
+  <form class="card" id="fCadastro" data-pane="cadastro" hidden>
+    <h2>Criar conta</h2>
+    <p>Use seu e-mail e escolha uma senha com pelo menos 8 caracteres.</p>
+    <label class="lbl" for="cEmail">E-mail</label>
+    <input class="inp" id="cEmail" name="email" type="email" inputmode="email" autocomplete="username" placeholder="seu@email.com" required>
+    <label class="lbl" for="cPass">Senha</label>
+    <div class="pw"><input class="inp" id="cPass" name="new-password" type="password" autocomplete="new-password" minlength="8" required><button class="eye" type="button" aria-label="Mostrar senha">Ver</button></div>
+    <button class="btn" id="cBtn" type="submit">Criar conta</button>
+    <p class="err" id="cadErr" hidden></p>
+    <button class="link" type="button" data-go="login">Já tenho conta. Entrar</button>
+  </form>
+
+  <!-- Criar ou trocar a senha com um código enviado ao e-mail -->
+  <form class="card" id="fSenha" data-pane="senha" hidden>
+    <h2>Criar senha</h2>
+    <p>Para quem já usava o CasaHub com código ou esqueceu a senha. Enviamos um código ao seu e-mail uma única vez e você define a senha.</p>
+    <label class="lbl" for="sEmail">E-mail</label>
+    <input class="inp" id="sEmail" name="email" type="email" inputmode="email" autocomplete="username" placeholder="seu@email.com" required>
+    <button class="btn" id="sSend" type="submit">Enviar código</button>
+    <p class="err" id="sErr" hidden></p>
+    <button class="link" type="button" data-go="login">Voltar para Entrar</button>
+  </form>
+  <form class="card" id="fNova" data-pane="nova" hidden>
+    <h2>Defina sua senha</h2>
+    <p id="nMsg"></p>
+    <input type="email" id="nUser" name="email" autocomplete="username" hidden>
+    <label class="lbl" for="nCode">Código do e-mail</label>
+    <input class="inp code" id="nCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required>
+    <label class="lbl" for="nPass">Nova senha</label>
+    <div class="pw"><input class="inp" id="nPass" name="new-password" type="password" autocomplete="new-password" minlength="8" required><button class="eye" type="button" aria-label="Mostrar senha">Ver</button></div>
+    <button class="btn" id="nBtn" type="submit">Salvar senha e entrar</button>
+    <p class="err" id="nErr" hidden></p>
+    <button class="link" type="button" data-go="senha">Não recebeu? Enviar outro código</button>
   </form>
 </section>
 
