@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CasaHub</title>
+<meta name="description" content="Lista de compras compartilhada da família">
+<meta name="theme-color" content="#F3F6F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="CasaHub">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- Login -->
+<section class="wrap gate" id="scr-login" hidden>
+  <div class="logo"><img src="/icons/icon-192.png" alt=""><h1>CasaHub</h1></div>
+  <p class="lead">A lista de compras da família, sempre atualizada no celular de todo mundo.</p>
+  <form class="card" id="fEmail">
+    <h2>Entrar</h2>
+    <p>Digite seu e-mail. Vamos enviar um código de 6 dígitos para você entrar, sem senha.</p>
+    <label class="sr" for="lEmail">E-mail</label>
+    <input class="inp" id="lEmail" type="email" inputmode="email" autocomplete="email" placeholder="seu@email.com" required>
+    <button class="btn" id="lSend" type="submit">Enviar código</button>
+    <p class="err" id="lErr" hidden></p>
+  </form>
+  <form class="card" id="fCode" hidden>
+    <h2>Digite o código</h2>
+    <p id="codeMsg"></p>
+    <label class="sr" for="lCode">Código</label>
+    <input class="inp code" id="lCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" required>
+    <button class="btn" id="lVerify" type="submit">Entrar</button>
+    <p class="err" id="cErr" hidden></p>
+    <button class="link" id="lBack" type="button">Usar outro e-mail</button>
+  </form>
+</section>
+
+<!-- Criar ou entrar em família -->
+<section class="wrap gate" id="scr-onboard" hidden>
+  <div class="logo"><img src="/icons/icon-192.png" alt=""><h1>Bem-vindo</h1></div>
+  <form class="card" id="fJoin">
+    <h2>Entrar na família</h2>
+    <p>Recebeu um código de convite? Digite aqui.</p>
+    <label class="sr" for="jCode">Código de convite</label>
+    <input class="inp code" id="jCode" maxlength="6" placeholder="ABC123" autocapitalize="characters" required>
+    <label class="sr" for="jName">Seu nome</label>
+    <input class="inp" id="jName" placeholder="Seu nome (ex.: Ana)" autocomplete="given-name" required>
+    <button class="btn" type="submit">Entrar na família</button>
+    <p class="err" id="jErr" hidden></p>
+  </form>
+  <div class="or">ou</div>
+  <form class="card" id="fCreate">
+    <h2>Criar uma família nova</h2>
+    <p>Você recebe um código para convidar os outros.</p>
+    <label class="sr" for="cFam">Nome da família</label>
+    <input class="inp" id="cFam" placeholder="Nome da família (ex.: Família Marçal)" required>
+    <label class="sr" for="cName">Seu nome</label>
+    <input class="inp" id="cName" placeholder="Seu nome" autocomplete="given-name" required>
+    <button class="btn ghost" type="submit">Criar família</button>
+    <p class="err" id="crErr" hidden></p>
+  </form>
+  <button class="link" id="oLogout" type="button">Sair</button>
+</section>
+
+<!-- App -->
+<div id="scr-app" hidden>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <h1 id="famName">Lista da Família</h1>
+        <span class="status" id="status">Carregando…</span>
+      </div>
+      <nav class="tabs" aria-label="Seções">
+        <a href="#lista" id="tab-lista">Lista</a>
+        <a href="#historico" id="tab-historico">Histórico</a>
+        <a href="#familia" id="tab-familia">Família</a>
+      </nav>
+      <form class="add" id="addForm" autocomplete="off">
+        <label class="sr" for="iName">Item</label>
+        <input id="iName" placeholder="O que precisa comprar?" enterkeyhint="done">
+        <label class="sr" for="iQty">Quantidade</label>
+        <input id="iQty" placeholder="Qtd.">
+        <ul class="sugs" id="sugs" role="listbox" hidden></ul>
+        <div class="row2">
+          <label class="sr" for="iSec">Seção</label>
+          <select id="iSec"></select>
+          <button class="btn" type="submit">Adicionar</button>
+        </div>
+        <p class="hint" id="hint" hidden></p>
+      </form>
+    </header>
+
+    <section id="view-lista">
+      <details class="common" id="common">
+        <summary><span class="chev">▸</span> Itens comuns <span class="status" id="commonCount"></span></summary>
+        <div class="secfilter" id="secfilter"></div>
+        <div class="chips" id="chips"></div>
+      </details>
+      <main class="stack" id="list"></main>
+    </section>
+
+    <section id="view-historico" hidden>
+      <main class="stack">
+        <p class="status">Listas finalizadas ficam guardadas por 5 semanas.</p>
+        <div class="hist" id="hist"></div>
+      </main>
+    </section>
+
+    <section id="view-familia" hidden>
+      <main class="stack fam">
+        <div class="card">
+          <h2>Convidar alguém</h2>
+          <p>A pessoa abre o CasaHub, entra com o e-mail dela e digita este código.</p>
+          <div class="invite"><span class="codebig" id="invCode">——</span><button class="btn ghost" id="copyCode" type="button">Copiar convite</button></div>
+        </div>
+        <div class="card">
+          <h2>Quem está na família</h2>
+          <ul class="people" id="people"></ul>
+        </div>
+        <div class="card">
+          <h2>Seu nome</h2>
+          <form id="fMyName" style="display:flex;gap:8px">
+            <label class="sr" for="myName">Seu nome</label>
+            <input class="inp" id="myName" required>
+            <button class="btn ghost" type="submit">Salvar</button>
+          </form>
+        </div>
+        <button class="btn ghost" id="logout" type="button">Sair da conta</button>
+      </main>
+    </section>
+  </div>
+
+  <div class="bar" id="bar">
+    <div class="wrap">
+      <div class="prog"><div class="track"><div class="fill" id="pfill"></div></div><div class="lbl" id="plbl">Nenhum item ainda</div></div>
+      <button class="btn" id="finBtn" type="button" disabled>Finalizar lista</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-back" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shT">
+    <h3 id="shT">Finalizar a lista?</h3>
+    <p id="shP"></p>
+    <button class="btn" id="shCarry" type="button" hidden></button>
+    <button class="btn" id="shClose" type="button">Finalizar lista</button>
+    <button class="btn ghost" id="shCancel" type="button">Voltar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="/config.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
