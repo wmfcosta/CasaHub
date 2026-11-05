@@ -53,6 +53,7 @@ const nomeDe = id => !id ? 'alguém' : id === me ? 'você' : (membros.find(m => 
 function msgErro(e) {
   const m = (e && (e.message || e.error_description)) || '';
   if (/rate limit|security purposes/i.test(m)) return 'Muitas tentativas. Aguarde um minuto e tente de novo.';
+  if (/retrieve session|session not found/i.test(m)) return 'O código foi aceito, mas o navegador não guardou o login. Atualize a página e tente de novo.';
   if (/expired|invalid|incorrect/i.test(m) && /token|otp|code|código/i.test(m)) return 'Código inválido ou vencido. Peça um novo código.';
   if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão. Verifique a internet e tente de novo.';
   return m || 'Algo deu errado. Tente de novo.';
