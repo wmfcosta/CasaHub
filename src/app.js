@@ -87,6 +87,7 @@ $('#lBack').addEventListener('click', () => { $('#fCode').hidden = true; $('#fEm
 for (const id of ['#logout', '#oLogout']) $(id).addEventListener('click', async () => {
   await sb.auth.signOut();
   session = null; me = null; fam = null; loaded = false; clearInterval(pollT); ultimoOk = 0;
+  curId = null; itens = []; listas = []; membros = []; catalogo = []; versao = null;
   location.hash = ''; screen('login');
 });
 
@@ -176,8 +177,9 @@ async function verificar() {
   if (error || data == null) { ultimoOk = 0; return; }
   ultimoOk = Date.now();
   if (data === versao) return;
-  const primeira = versao === null; versao = data;
-  if (primeira) return;
+  versao = data;
+  // também na primeira checagem: se a carga inicial veio vazia porque o banco
+  // tinha acabado de acordar, ela se corrige aqui
   await Promise.all([carregarListas(), carregarCatalogo(), carregarMembros()]);
   await carregarItens(); renderAll();
 }
