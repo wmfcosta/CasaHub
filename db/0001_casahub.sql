@@ -69,6 +69,11 @@ drop trigger if exists itens_alterado_em on public.itens;
 create trigger itens_alterado_em before update on public.itens for each row execute function public.tocar_alterado_em();
 
 -- ---------- acesso ----------
+-- o papel "authenticated" não enxerga o schema auth; as regras usam este atalho
+create or replace function public.meu_id() returns text language sql stable security definer set search_path = public, pg_temp as $$
+  select auth.user_id();
+$$;
+
 create or replace function public.eh_membro(f uuid)
 returns boolean language sql stable security definer set search_path = public, pg_temp as $$
   select exists(select 1 from public.membros m where m.familia_id = f and m.user_id = auth.user_id());
@@ -84,15 +89,15 @@ drop policy if exists familias_ler on public.familias;
 create policy familias_ler on public.familias for select to authenticated using (public.eh_membro(id));
 drop policy if exists familias_admin on public.familias;
 create policy familias_admin on public.familias for update to authenticated
-  using (exists(select 1 from public.membros m where m.familia_id = id and m.user_id = auth.user_id() and m.papel = 'admin'));
+  using (exists(select 1 from public.membros m where m.familia_id = id and m.user_id = public.meu_id() and m.papel = 'admin'));
 
 drop policy if exists membros_ler on public.membros;
 create policy membros_ler on public.membros for select to authenticated using (public.eh_membro(familia_id));
 drop policy if exists membros_proprio_nome on public.membros;
 create policy membros_proprio_nome on public.membros for update to authenticated
-  using (user_id = auth.user_id()) with check (user_id = auth.user_id());
+  using (user_id = public.meu_id()) with check (user_id = public.meu_id());
 drop policy if exists membros_sair on public.membros;
-create policy membros_sair on public.membros for delete to authenticated using (user_id = auth.user_id());
+create policy membros_sair on public.membros for delete to authenticated using (user_id = public.meu_id());
 
 drop policy if exists listas_ler on public.listas;
 create policy listas_ler on public.listas for select to authenticated using (public.eh_membro(familia_id));
@@ -117,6 +122,11 @@ drop policy if exists catalogo_remover on public.catalogo;
 create policy catalogo_remover on public.catalogo for delete to authenticated using (public.eh_membro(familia_id));
 
 -- ---------- funções ----------
+-- usada pelo app para confirmar que o banco (recém-acordado) já reconhece o usuário
+create or replace function public.quem_sou() returns text language sql stable security definer set search_path = public, pg_temp as $$
+  select public.meu_id();
+$$;
+
 create or replace function public.gerar_codigo()
 returns text language sql volatile set search_path = public, pg_temp as $$
   select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 1 + floor(random()*32)::int, 1), '')
@@ -217,4 +227,4 @@ grant insert, delete on public.itens, public.catalogo to authenticated;
 grant update (comprado, comprado_por, comprado_em, qtd, secao, nome) on public.itens to authenticated;
 grant execute on function public.criar_familia(text,text), public.entrar_familia(text,text),
   public.lista_aberta(uuid), public.finalizar_lista(uuid,boolean), public.versao_familia(uuid),
-  public.eh_membro(uuid), public.tocar_alterado_em() to authenticated;
+  public.eh_membro(uuid), public.meu_id(), public.quem_sou(), public.tocar_alterado_em() to authenticated;

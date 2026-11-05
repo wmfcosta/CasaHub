@@ -23,6 +23,24 @@ let listas = [], itens = [], catalogo = [], curId = null;
 let loaded = false, flashId = null, secFilter = 'todos', pollT = null, versao = null;
 
 /* ---------- utilidades ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// O banco do Neon desliga quando fica parado. Logo depois que ele acorda, a primeira
+// requisição às vezes chega sem a identificação do usuário. Antes de ler ou gravar,
+// confirmamos que o banco já reconhece quem está usando.
+let acordado = null, ultimoOk = 0;
+function acordar() {
+  if (Date.now() - ultimoOk < 60000) return Promise.resolve(true);
+  if (!acordado) acordado = (async () => {
+    for (let i = 0; i < 6; i++) {
+      const { data } = await sb.rpc('quem_sou');
+      if (data) { ultimoOk = Date.now(); return true; }
+      await sleep(300 * (i + 1));
+    }
+    return false;
+  })().finally(() => { acordado = null; });
+  return acordado;
+}
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2800); }
 function showErr(el, msg) { el.textContent = msg; el.hidden = !msg; }
@@ -61,12 +79,14 @@ for (const id of ['#logout', '#oLogout']) $(id).addEventListener('click', () => 
 /* ---------- família ---------- */
 $('#fJoin').addEventListener('submit', async e => {
   e.preventDefault(); showErr($('#jErr'), '');
+  await acordar();
   const { data, error } = await sb.rpc('entrar_familia', { p_codigo: $('#jCode').value, p_meu_nome: $('#jName').value });
   if (error) return showErr($('#jErr'), msgErro(error));
   await abrirFamilia(data);
 });
 $('#fCreate').addEventListener('submit', async e => {
   e.preventDefault(); showErr($('#crErr'), '');
+  await acordar();
   const { data, error } = await sb.rpc('criar_familia', { p_nome_familia: $('#cFam').value, p_meu_nome: $('#cName').value });
   if (error) return showErr($('#crErr'), msgErro(error));
   await abrirFamilia(data);
@@ -76,6 +96,7 @@ $('#fCreate').addEventListener('submit', async e => {
 $('#fMyName').addEventListener('submit', async e => {
   e.preventDefault();
   const nome = $('#myName').value.trim(); if (!nome) return;
+  await acordar();
   const { error } = await sb.from('membros').update({ nome }).eq('familia_id', fam.id).eq('user_id', me);
   if (error) return toast(msgErro(error));
   toast('Nome salvo'); await carregarMembros();
@@ -89,6 +110,7 @@ $('#copyCode').addEventListener('click', async () => {
 async function iniciar() {
   if (!session) { screen('login'); return; }
   me = session.user.id;
+  await acordar();
   const { data, error } = await sb.from('membros').select('familia_id, criado_em').eq('user_id', me).order('criado_em').limit(1);
   if (error) { toast(msgErro(error)); return; }
   if (!data.length) { screen('onboard'); return; }
@@ -137,7 +159,9 @@ let ocupado = 0;
 async function verificar() {
   if (!fam || ocupado || document.visibilityState !== 'visible') return;
   const { data, error } = await sb.rpc('versao_familia', { p_familia: fam.id });
-  if (error || data == null || data === versao) return;
+  if (error || data == null) { ultimoOk = 0; return; }
+  ultimoOk = Date.now();
+  if (data === versao) return;
   const primeira = versao === null; versao = data;
   if (primeira) return;
   await Promise.all([carregarListas(), carregarCatalogo(), carregarMembros()]);
@@ -150,7 +174,7 @@ function acompanhar() {
   pollT = setInterval(verificar, POLL_MS);
 }
 // ao voltar para o app, verifica na hora
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verificar(); });
+document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && fam) { await acordar(); verificar(); } });
 // depois de uma ação própria, considera a versão atual para não recarregar à toa
 async function sincronizar() { const { data } = await sb.rpc('versao_familia', { p_familia: fam.id }); if (data != null) versao = data; }
 
@@ -164,7 +188,7 @@ function fullCatalog() {
 const findCat = name => { const k = norm(name); return fullCatalog().find(c => norm(c.name) === k); };
 
 /* ---------- ações ---------- */
-async function addItem(...a) { ocupado++; try { return await _addItem(...a); } finally { ocupado--; sincronizar(); } }
+async function addItem(...a) { ocupado++; try { await acordar(); return await _addItem(...a); } finally { ocupado--; sincronizar(); } }
 async function _addItem(name, section, qty, silent) {
   const k = norm(name);
   const dup = itens.find(i => norm(i.nome) === k && !i.comprado);
@@ -187,21 +211,21 @@ async function _addItem(name, section, qty, silent) {
   if (!silent) toast(`${name} adicionado`);
   return true;
 }
-async function toggleItem(it) { ocupado++; try { await _toggleItem(it); } finally { ocupado--; sincronizar(); } }
+async function toggleItem(it) { ocupado++; try { await acordar(); await _toggleItem(it); } finally { ocupado--; sincronizar(); } }
 async function _toggleItem(it) {
   const patch = it.comprado ? { comprado: false, comprado_por: null, comprado_em: null } : { comprado: true, comprado_por: me, comprado_em: new Date().toISOString() };
   Object.assign(it, patch); renderAll();
   const { error } = await sb.from('itens').update(patch).eq('id', it.id);
   if (error) { toast(msgErro(error)); await carregarItens(); renderAll(); }
 }
-async function removeItem(it) { ocupado++; try { await _removeItem(it); } finally { ocupado--; sincronizar(); } }
+async function removeItem(it) { ocupado++; try { await acordar(); await _removeItem(it); } finally { ocupado--; sincronizar(); } }
 async function _removeItem(it) {
   itens = itens.filter(i => i.id !== it.id); renderAll();
   const { error } = await sb.from('itens').delete().eq('id', it.id);
   if (error) { toast(msgErro(error)); await carregarItens(); renderAll(); }
   else toast(`${it.nome} removido`);
 }
-async function finalizar(levar) { ocupado++; try { await _finalizar(levar); } finally { ocupado--; sincronizar(); } }
+async function finalizar(levar) { ocupado++; try { await acordar(); await _finalizar(levar); } finally { ocupado--; sincronizar(); } }
 async function _finalizar(levar) {
   closeSheet();
   if (!curId) return;
@@ -360,6 +384,7 @@ $('#hist').addEventListener('click', async e => {
   const id = b.dataset.h;
   if (histOpen.has(id)) { histOpen.delete(id); return renderHist(); }
   histOpen.set(id, 'loading'); renderHist();
+  await acordar();
   const { data, error } = await sb.from('itens').select('nome,secao,qtd,comprado').eq('lista_id', id);
   if (error) { histOpen.delete(id); toast(msgErro(error)); } else histOpen.set(id, data);
   renderHist();

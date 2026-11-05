@@ -23,9 +23,14 @@ App para organizar o dia a dia da família. Primeiro módulo: **lista de compras
 
 - **Neon Auth** (login por código enviado ao e-mail) e **Data API** (acesso do navegador ao banco).
 - Tabelas: `familias`, `membros`, `listas`, `itens`, `catalogo`, todas com RLS: só membros da família leem e alteram os dados dela. O usuário é identificado por `auth.user_id()`.
-- Funções chamadas pelo app: `criar_familia`, `entrar_familia`, `lista_aberta`, `finalizar_lista`, `versao_familia`.
+- Funções chamadas pelo app: `criar_familia`, `entrar_familia`, `lista_aberta`, `finalizar_lista`, `versao_familia`, `quem_sou`.
+- O banco desliga após 5 min sem uso. Logo após acordar, a primeira requisição pode chegar sem a identificação do usuário; por isso o app chama `quem_sou` (com novas tentativas) antes de ler ou gravar.
 - Histórico de 5 semanas: listas finalizadas há mais de 35 dias são apagadas sempre que a família abre ou finaliza uma lista.
 - Atualização entre celulares: com o app aberto, ele consulta `versao_familia` a cada 4 segundos e recarrega só quando algo mudou.
+
+## Projeto no Neon
+
+- Projeto `CasaHub` (`royal-cell-09902152`), região São Paulo (aws-sa-east-1), branch `main`, banco `neondb`.
 
 ## Configuração
 
